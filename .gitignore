@@ -152,3 +152,6 @@ typechain-types
 cache
 artifacts
 
+src/TestInterest.sol
+test/TestInterest.js
+
