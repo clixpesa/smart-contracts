@@ -16,5 +16,10 @@ module.exports = async ({ getNamedAccounts, deployments }) => {
     from: deployer,
     log: true,
   })
+
+  await deploy('RoscaSpaces', {
+    from: deployer,
+    log: true,
+  })
 }
-module.exports.tags = ['TestInterest', 'P2PLoans', 'PersonalSpaces']
+module.exports.tags = ['TestInterest', 'P2PLoans', 'PersonalSpaces', 'RoscaSpaces']
