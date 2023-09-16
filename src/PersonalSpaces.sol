@@ -216,10 +216,10 @@ contract PersonalSpaces {
         }
     }
 
-    function withdrawFromPersonalSpace(
+    function _withdrawFromPersonalSpace(
         string memory _spaceId,
         uint256 _amount
-    ) external {
+    ) internal {
         require(personalSpaceIndex[_spaceId] != 0, "SpaceId does not exist");
         require(
             myPersonalSpaceIdx[msg.sender][_spaceId] != 0,
@@ -263,5 +263,35 @@ contract PersonalSpaces {
                 myPersonalSpaceIdx[msg.sender][_spaceId].sub(1)
             ].SS = SpaceStates(FundsState.isFundable, ActivityState.isActive);
         }
+    }
+
+    function withdrawFromPersonalSpace(
+        string memory _spaceId,
+        uint256 _amount
+    ) external {
+        _withdrawFromPersonalSpace(_spaceId, _amount);
+    }
+
+    function closePersonalSpace(string memory _spaceId) external {
+        require(personalSpaceIndex[_spaceId] != 0, "SpaceId does not exist");
+        require(
+            myPersonalSpaceIdx[msg.sender][_spaceId] != 0,
+            "SpaceId does not exist"
+        );
+        PersonalDetails memory _PD = allPersonalSpaces[
+            personalSpaceIndex[_spaceId].sub(1)
+        ];
+        require(_PD.SD.owner == msg.sender, "Must be owner");
+
+        _withdrawFromPersonalSpace(_spaceId, _PD.currentBalance);
+
+        allPersonalSpaces[personalSpaceIndex[_spaceId].sub(1)]
+            .SS
+            .currentActivityState = ActivityState.isInActive;
+        myPersonalSpaces[msg.sender][
+            myPersonalSpaceIdx[msg.sender][_spaceId].sub(1)
+        ].SS.currentActivityState = ActivityState.isInActive;
+
+        emit ClosedPersonalSpace(msg.sender, _spaceId);
     }
 }
