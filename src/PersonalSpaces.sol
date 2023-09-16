@@ -1,17 +1,13 @@
-// SPDX-License-Identifier: Apache 2.0
-pragma solidity ^0.8.7;
+//SPDX-License-Identifier: Apache 2.0
+/**
+@title Clixpesa Personal Spaces Contract
+@author Dekan Kachi - @kachdekan
+@notice Allow users to create saving goals and save towards them.
+*/
+
+pragma solidity ^0.8.19;
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-
-struct SpaceDetails {
-    IERC20 token;
-    address payable owner;
-    string spaceName;
-    string imgLink;
-    string spaceId;
-    uint256 goalAmount;
-    uint256 deadline;
-}
 
 contract PersonalSpaces {
     using SafeMath for uint256;
@@ -26,6 +22,15 @@ contract PersonalSpaces {
     }
 
     //Personal Space Structs
+    struct SpaceDetails {
+        IERC20 token;
+        address payable owner;
+        string spaceName;
+        string imgLink;
+        string spaceId;
+        uint256 goalAmount;
+        uint256 deadline;
+    }
     struct SpaceStates {
         FundsState currentFundState;
         ActivityState currentActivityState;
