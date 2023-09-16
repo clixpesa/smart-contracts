@@ -35,5 +35,8 @@
     "ts-node": "^10.9.1",
     "typechain": "^8.1.1",
     "typescript": "^5.0.4"
+  },
+  "dependencies": {
+    "@prb/math": "^4.0.1"
   }
 }

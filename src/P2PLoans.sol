@@ -5,9 +5,10 @@
 @notice Allow users to borrow and lend funds to each other in a P2P fashion.
 */
 
-pragma solidity ^0.8.9;
+pragma solidity ^0.8.19;
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "./LoansInterest.sol";
 import "hardhat/console.sol";
 
 contract P2PLoans {
@@ -88,6 +89,7 @@ contract P2PLoans {
     event FundedP2PLoan(address funder, string loanId, uint256 amount);
     event RepaidP2PLoan(address repayer, string loanId, uint256 amount);
     event CreatedP2PLoan(address initiator, P2PLoanDetails P2PLD);
+    event UpdatedP2PLoan(string loanId, uint256 newBalance);
 
     constructor() {}
 
@@ -187,12 +189,6 @@ contract P2PLoans {
             allP2PLoans[p2pLoanIndex[_loanId].sub(1)].currentBalance >= _amount,
             ">Amount"
         );
-
-        console.log(
-            ">> Yes, this loan: %s",
-            allP2PLoans[p2pLoanIndex[_loanId].sub(1)].LD.loanId
-        );
-
         /// @dev transfer funds to lender
         require(
             allP2PLoans[p2pLoanIndex[_loanId].sub(1)].LD.token.transferFrom(
@@ -212,7 +208,8 @@ contract P2PLoans {
         myP2PLoans[msg.sender][myP2PLoanIdx[msg.sender][_loanId].sub(1)]
             .currentBalance = myP2PLoans[msg.sender][
             myP2PLoanIdx[msg.sender][_loanId].sub(1)
-        ].currentBalance.sub(_amount);
+        ].currentBalance = allP2PLoans[p2pLoanIndex[_loanId].sub(1)]
+            .currentBalance;
 
         /// @dev update lender's loan details
         myP2PLoans[allP2PLoans[p2pLoanIndex[_loanId].sub(1)].LP.lender][
@@ -225,7 +222,8 @@ contract P2PLoans {
             myP2PLoanIdx[allP2PLoans[p2pLoanIndex[_loanId].sub(1)].LP.lender][
                 _loanId
             ].sub(1)
-        ].currentBalance.sub(_amount);
+        ].currentBalance = allP2PLoans[p2pLoanIndex[_loanId].sub(1)]
+            .currentBalance;
 
         emit RepaidP2PLoan(msg.sender, _loanId, _amount);
     }
@@ -239,21 +237,12 @@ contract P2PLoans {
     /// @notice Create a loan offer
     /// @param LOD LoanDetails struct
     function createLoanOffer(LoanOfferDetails memory LOD) external {
-        require(LOD.LD.initiator == msg.sender, "Must be owner");
-        require(LOD.LD.principal > 0, "Principal must be greater than 0");
-        require(LOD.LD.interest > 0, "Interest must be greater than 0");
-        require(
-            LOD.LD.minDuration > 0 && LOD.LD.maxDuration > 0,
-            "Duration must be greater than 0"
-        );
-        require(
-            LOD.minLoanAmount > 0 && LOD.maxLoanAmount > 0,
-            "Loan amount must be greater than 0"
-        );
-        require(
-            LOD.LD.minDuration <= LOD.LD.maxDuration,
-            "Min duration must be less than or equal to max duration"
-        );
+        require(LOD.LD.initiator == msg.sender, "MBO");
+        require(LOD.LD.principal > 0, "Interest>0");
+        require(LOD.LD.interest > 0, "Interest>0");
+        require(LOD.LD.minDuration > 0 && LOD.LD.maxDuration > 0, "Duration>0");
+        require(LOD.minLoanAmount > 0 && LOD.maxLoanAmount > 0, "LoanAmount>0");
+        require(LOD.LD.minDuration <= LOD.LD.maxDuration, "!Duration");
 
         allOffers.push(LOD);
         myOffers[msg.sender].push(LOD);
@@ -292,8 +281,6 @@ contract P2PLoans {
             "!Duration"
         );
 
-        console.log(">> Yes, this offer: %s", _thisOffer.LD.loanId);
-
         /// @dev prepare the loan details and change offerId with LoanId
         _updateLoanListsFromOffer(
             msg.sender,
@@ -322,8 +309,6 @@ contract P2PLoans {
             allP2PLoans[p2pLoanIndex[_loanId].sub(1)].LS == LoanState.isPending,
             "!Pending"
         );
-
-        console.log(">> Yes, this loan: %s", _loanId);
 
         /// @dev transfer funds to borrower
         require(
@@ -381,7 +366,6 @@ contract P2PLoans {
         string memory _loanId
     ) internal {
         if (requestIndex[_requestId] != 0) {
-            console.log(">> Upadating Loans List from a Request");
             LoanDetails memory _thisRequestLD = allRequests[
                 requestIndex[_requestId].sub(1)
             ].LD;
@@ -397,7 +381,9 @@ contract P2PLoans {
                         allRequests[requestIndex[_requestId].sub(1)]
                             .LD
                             .maxDuration
-                    )
+                    ),
+                    block.timestamp,
+                    block.timestamp
                 )
             );
             p2pLoanIndex[_loanId] = allP2PLoans.length;
@@ -432,8 +418,6 @@ contract P2PLoans {
             ] = myRequestIdx[_borrower][_requestId];
             delete myRequestIdx[_borrower][_requestId];
             myRequests[_borrower].pop();
-        } else if (offerIndex[_requestId] != 0) {
-            console.log(">> Upadating Loans List from an Offer");
         }
     }
 
@@ -447,7 +431,6 @@ contract P2PLoans {
         string memory _loanId
     ) internal {
         if (offerIndex[_offerId] != 0) {
-            console.log(">> Upadating Loans List from an Offer");
             LoanDetails memory _thisOfferLD = allOffers[
                 offerIndex[_offerId].sub(1)
             ].LD;
@@ -460,7 +443,9 @@ contract P2PLoans {
                     LoanParticipants(payable(_borrower), payable(_lender)),
                     LoanState.isPending,
                     0,
-                    block.timestamp.add(_duration)
+                    block.timestamp.add(_duration),
+                    block.timestamp,
+                    block.timestamp
                 )
             );
             p2pLoanIndex[_loanId] = allP2PLoans.length;
@@ -508,18 +493,46 @@ contract P2PLoans {
                 delete myOfferIdx[_lender][_offerId];
                 myOffers[_lender].pop();
             }
-        } else if (requestIndex[_loanId] != 0) {
-            console.log(">> Upadating Loans List from a Request");
         }
     }
 
     /// @dev Update loan interest and duration
-    function _updateLoanInterest(string memory _loanId) internal {
+    function _updateLoanBalancefromInterest(string memory _loanId) internal {
         require(p2pLoanIndex[_loanId] != 0, "!Loan");
         require(
-            allP2PLoans[p2pLoanIndex[_loanId].sub(1)].LS == LoanState.isActive,
-            "!Active"
+            allP2PLoans[p2pLoanIndex[_loanId].sub(1)].currentBalance > 0,
+            "!Balance"
         );
+
+        uint256 _newBalance = LoanInterest._getNewBalance(
+            allP2PLoans[p2pLoanIndex[_loanId].sub(1)].currentBalance,
+            allP2PLoans[p2pLoanIndex[_loanId].sub(1)].LD.interest,
+            block.timestamp.sub(
+                allP2PLoans[p2pLoanIndex[_loanId].sub(1)].updatedAt
+            )
+        );
+        console.log("New Balance: %s", _newBalance);
+        //update loan balance and timestamp
+        allP2PLoans[p2pLoanIndex[_loanId].sub(1)].currentBalance = allP2PLoans[
+            p2pLoanIndex[_loanId].sub(1)
+        ].currentBalance = _newBalance;
+        allP2PLoans[p2pLoanIndex[_loanId].sub(1)].updatedAt = block.timestamp;
+
+        /*update borrower's loan
+        myP2PLoans[allP2PLoans[p2pLoanIndex[_loanId].sub(1)].LP.borrower][
+            myP2PLoanIdx[allP2PLoans[p2pLoanIndex[_loanId].sub(1)].LP.borrower][
+                _loanId
+            ].sub(1)
+        ] = allP2PLoans[p2pLoanIndex[_loanId].sub(1)];
+
+        //update lender's loan
+        myP2PLoans[allP2PLoans[p2pLoanIndex[_loanId].sub(1)].LP.lender][
+            myP2PLoanIdx[allP2PLoans[p2pLoanIndex[_loanId].sub(1)].LP.lender][
+                _loanId
+            ].sub(1)
+        ] = allP2PLoans[p2pLoanIndex[_loanId].sub(1)];*/
+
+        emit UpdatedP2PLoan(_loanId, _newBalance);
     }
 
     /// @notice Getter functions
@@ -586,5 +599,10 @@ contract P2PLoans {
         string memory _loanId
     ) external view returns (P2PLoanDetails memory) {
         return allP2PLoans[p2pLoanIndex[_loanId].sub(1)];
+    }
+
+    //update loan balance from interest
+    function updateLoanBalance(string memory _loanId) external {
+        _updateLoanBalancefromInterest(_loanId);
     }
 }

@@ -4,6 +4,7 @@ const stableTokenAbi = require('./stableToken.json')
 const {customAlphabet} = require('nanoid')
 const nanoid = customAlphabet('1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ', 10)
 const config = require('./config.js')
+const { time } = require('@nomicfoundation/hardhat-network-helpers')
 
 describe('Clixpesa P2P Loans', function () {
   let P2PLoans, P2PLoansIface, Token, addr1, addr2, addr3
@@ -73,6 +74,20 @@ describe('Clixpesa P2P Loans', function () {
     expect(borrowerBal.add(loanAmount)).to.be.equal(await Token.balanceOf(addr1.address))
     expect(await P2PLoans.getAvailableRequests()).to.have.lengthOf(0)
     expect(await P2PLoans.getRequestsByOwner(addr1.address)).to.have.lengthOf(0)
+  })
+
+  it('Should Increase loan balance after 7days', async function () {
+    const thisLoans = await P2PLoans.getP2PLoansByOwner(addr1.address)
+    const currentBalance = thisLoans[0].currentBalance
+    console.log("Current Balance: ", currentBalance.toString())
+    const loanId = thisLoans[0].LD.loanId
+    //increase time by 7 days
+    await time.increase(7 * 24 * 60 * 60)
+    const thisLoan = await P2PLoans.getP2PLoanById(loanId)
+    delay(3000)
+    console.log("Increased Balance: ", await thisLoan.wait())
+    expect(thisLoan.currentBalance).to.be.above(currentBalance)
+
   })
 
   it('ADD2 Should Create a Request too', async function () {
