@@ -26,8 +26,11 @@ contract RoscaSpaces {
     );
 
     /// @notice RoscaSpaces functions
-    function createRoscaSpace(RoscaDetails memory _RD) public {
-        Rosca newRosca = new Rosca(_RD, msg.sender);
+    function createRoscaSpace(
+        RoscaDetails memory _RD,
+        string memory _aCode
+    ) public {
+        Rosca newRosca = new Rosca(_RD, _aCode, msg.sender);
         roscaSpaces.push(newRosca);
         roscaSpacesIndex[address(newRosca)] = roscaSpaces.length - 1;
         myRoscas[msg.sender].push(newRosca);

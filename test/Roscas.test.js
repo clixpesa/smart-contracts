@@ -7,7 +7,7 @@ const config = require('./config.js')
 const { time } = require('@nomicfoundation/hardhat-network-helpers')
 
 describe('Clixpesa Rosca Spaces', function () {
-  let RoscaSpaces, RoscaSpacesIface, Rosca, RoscaIface, Token, addr1, addr2, addr3
+  let RoscaSpaces, RoscaSpacesIface, Rosca, RoscaIface, Token, addr1, addr2, addr3, inviteCode
   const delay = (ms) => {
     return new Promise((resolve) => setTimeout(resolve, ms))
   }
@@ -33,21 +33,36 @@ describe('Clixpesa Rosca Spaces', function () {
       token: Token.address,
       roscaName: 'Wajackoyas',
       imgLink: 'bit.ly/hthfdrer',
-      authCode: nanoid(),
       goalAmount: ethers.utils.parseUnits('0.2', 6).toString(),
       ctbAmount: ethers.utils.parseEther('0.1', 6).toString(),
       ctbDay: 'Sunday',
-      ctbOccurence: 'Weekly',
       disbDay: 'Monday',
-      disbOccurence: 'Weekly',
+      occurrence: 'Monthly',
     }
-
-    const txResponse = await RoscaSpaces.createRoscaSpace(Object.values(roscaDetails))
+    inviteCode = nanoid()
+    const txResponse = await RoscaSpaces.createRoscaSpace(Object.values(roscaDetails), inviteCode)
     const txReceipt = await txResponse.wait()
     const thisLog = txReceipt.logs.find((el) => el.address === RoscaSpaces.address)
     const results = RoscaSpacesIface.parseLog({ data: thisLog.data, topics: thisLog.topics })
-    Rosca = await ethers.getContractAt('Rosca', results.args.roscaAddress)
-
     expect(results.args.roscaName).to.be.equal(roscaDetails.roscaName)
+    Rosca = await ethers.getContractAt('Rosca', results.args.roscaAddress)
+    const roscaDetailsFrom = await Rosca.getRoscaDetails()
+    expect(roscaDetailsFrom.creator).to.be.equal(addr1.address)
+    
+  })
+
+  it('ADD2 Should join the rosca', async function () {
+    const txResponse = await Rosca.connect(addr2).joinRosca(inviteCode)
+    const txReceipt = await txResponse.wait()
+    const thisLog = txReceipt.logs.find((el) => el.address === Rosca.address)
+    const results = RoscaIface.parseLog({ data: thisLog.data, topics: thisLog.topics })
+    expect(results.args.memberAddress).to.be.equal(addr2.address)
+    const members = await Rosca.getMembers()
+    expect(members.length).to.be.equal(2)
+  })
+
+  it('Should return next contribution date', async function () {
+    const nextContributionDate = await Rosca.nextDayAndTime("Sunday")
+    console.log(nextContributionDate)
   })
 }) 
