@@ -15,6 +15,82 @@ library CalcTime {
     uint constant DOW_SAT = 6;
     uint constant DOW_SUN = 7;
 
+    /// @dev should return next timestamp from given schedule and day of week
+    /// @param _schDay 1 Monday
+    function _nextDayAndTime(
+        string memory _schDay,
+        string memory _schOccur
+    ) internal view returns (uint256 nextTimeStamp) {
+        uint256 day;
+        uint256 month;
+        uint256 year;
+        uint256 _ocurrance = _getOcurranceNo(_schOccur);
+        if (_ocurrance == 1) {
+            return block.timestamp + SECONDS_PER_DAY;
+        } else {
+            uint256 _day = _getDayNo(_schDay);
+            uint256 _days = block.timestamp / (24 * 60 * 60);
+            uint256 dayOfWeek = ((_days + 3) % 7) + 1;
+            (year, month, day) = _daysToDate(_days);
+            if (_ocurrance == 7) {
+                uint256 nextDay = day + ((7 + _day - dayOfWeek) % 7);
+                nextTimeStamp =
+                    _daysFromDate(year, month, nextDay) *
+                    SECONDS_PER_DAY;
+                if (nextTimeStamp <= block.timestamp) {
+                    nextTimeStamp = nextTimeStamp + (7 * SECONDS_PER_DAY);
+                }
+                return nextTimeStamp;
+            } else if (_ocurrance == 28) {
+                uint256 nextDay = day + ((28 + _day - dayOfWeek) % 28);
+                nextTimeStamp =
+                    _daysFromDate(year, month, nextDay) *
+                    SECONDS_PER_DAY;
+                if (nextTimeStamp <= block.timestamp) {
+                    nextTimeStamp = nextTimeStamp + (28 * SECONDS_PER_DAY);
+                }
+                return nextTimeStamp;
+            }
+        }
+    }
+
+    /// @dev return number of day from given day of week
+    /// @param _day 1. Monday
+    function _getDayNo(
+        string memory _day
+    ) internal pure returns (uint256 dayNo) {
+        string[7] memory weekList = [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday"
+        ];
+        bytes32 encodedElement = keccak256(abi.encode(_day));
+        for (uint256 i = 0; i < weekList.length; i++) {
+            if (encodedElement == keccak256(abi.encode(weekList[i]))) {
+                return i + 1;
+            }
+        }
+    }
+
+    /// @dev return number of ocurrance from given ocurrance
+    /// @param _ocurrance 1. Daily 7. Weekly 30 Monthly
+    function _getOcurranceNo(
+        string memory _ocurrance
+    ) internal pure returns (uint256 ocurranceNo) {
+        string[3] memory ocurranceList = ["Daily", "Weekly", "Monthly"];
+        uint8[3] memory ocurranceSize = [1, 7, 28];
+        bytes32 encodedElement = keccak256(abi.encode(_ocurrance));
+        for (uint256 i = 0; i < ocurranceList.length; i++) {
+            if (encodedElement == keccak256(abi.encode(ocurranceList[i]))) {
+                return ocurranceSize[i];
+            }
+        }
+    }
+
     function _daysFromDate(
         uint year,
         uint month,

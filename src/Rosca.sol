@@ -49,17 +49,18 @@ contract Rosca {
 
     struct Contribution {
         address memberAddress;
-        string contributionTxHash;
+        //string contributionTxHash;
         uint256 contributionAmount;
         uint256 contributionDate;
     }
 
     struct PotDetails {
-        address potOwner;
         uint256 potId;
+        address potOwner;
         uint256 potAmount;
         uint256 potBalance;
         uint256 payoutDate;
+        uint256 deadline;
         Contribution[] contributions;
     }
     /// @dev RoscaSpaceDetails struct for this Rosca
@@ -82,6 +83,13 @@ contract Rosca {
 
     /// @notice Rosca events
     event JoinedRosca(address memberAddress, uint256 joinedAt);
+    event CreatedPot(
+        address dueMember,
+        uint256 ctbDeadline,
+        uint256 disbDeadline
+    );
+    event PotFunded(address memberAddress, uint256 amount);
+    event PotPayedOut(address memberAddress, uint256 amount);
 
     /// @notice Rosca Constructor
     constructor(
@@ -101,6 +109,7 @@ contract Rosca {
         });
         RSD.members.push(firstMember);
         memberIndex[_creator] = RSD.members.length;
+        _createPot();
     }
 
     /// @notice Rosca functions
@@ -130,6 +139,110 @@ contract Rosca {
         emit JoinedRosca(msg.sender, joinedAt);
     }
 
+    /// @notice Should contribute to the current pot
+    /// @param _amount the amount to contribute
+    function contributeToPot(uint256 _amount) external {
+        require(
+            RSD.RS == RoscaState.isLive,
+            "You can only contribute to a live Rosca"
+        );
+        require(
+            RSD.PS == PotState.isOpen,
+            "You can only contribute to an open pot"
+        );
+        require(
+            RSD.RD.token.allowance(msg.sender, address(this)) >= _amount,
+            "You need to approve the token first"
+        );
+        require(
+            RSD.RD.token.transferFrom(msg.sender, address(this), _amount),
+            "Transfer failed"
+        );
+        RSD.currentPotBalance = RSD.currentPotBalance.add(_amount);
+        RSD.roscaBalance = RSD.RD.token.balanceOf(address(this));
+        currentPD.potBalance = currentPD.potBalance.add(_amount);
+        currentPD.contributions.push(
+            Contribution({
+                memberAddress: msg.sender,
+                contributionAmount: _amount,
+                contributionDate: block.timestamp
+            })
+        );
+        if (currentPD.potBalance == RSD.RD.goalAmount) {
+            RSD.PS = PotState.isClosed;
+        }
+        emit PotFunded(msg.sender, _amount);
+    }
+
+    /// @notice Should payout the current pot
+    function payoutPot() external {
+        require(
+            RSD.RS == RoscaState.isLive,
+            "You can only payout a live Rosca"
+        );
+        require(
+            currentPD.potBalance == RSD.RD.goalAmount,
+            "Pot is not fully funded"
+        );
+        require(
+            RSD.currentPotId == memberIndex[msg.sender],
+            "You are not due to payout"
+        );
+        require(
+            RSD.RD.token.transfer(
+                currentPD.potOwner,
+                currentPD.potBalance.sub(RSD.RD.goalAmount)
+            ),
+            "Transfer failed"
+        );
+        RSD.currentPotBalance = 0;
+        RSD.roscaBalance = RSD.RD.token.balanceOf(address(this));
+        RSD.PS = PotState.isPayedOut;
+
+        emit PotPayedOut(msg.sender, currentPD.potBalance);
+        _createPot();
+    }
+
+    /// @notice Should create a new pot
+    function _createPot() internal {
+        if (RSD.RS == RoscaState.isStarting) {
+            currentPD.potId = 1;
+            currentPD.potOwner = RSD
+                .members[memberIndex[RSD.creator].sub(1)]
+                .memberAddress;
+            RSD.RS = RoscaState.isLive;
+        } else {
+            if (currentPD.potId == RSD.members.length) {
+                currentPD.potId = 0;
+                // reset member isPotted to false
+                for (uint256 i = 0; i < RSD.members.length; i++) {
+                    RSD.members[i].isPotted = false;
+                }
+            }
+            currentPD.potId = currentPD.potId + 1;
+            currentPD.potOwner = RSD.members[currentPD.potId - 1].memberAddress;
+        }
+        currentPD.potAmount = RSD.RD.goalAmount;
+        currentPD.potBalance = 0;
+        currentPD.payoutDate = CalcTime._nextDayAndTime(
+            RSD.RD.disbDay,
+            RSD.RD.occurrence
+        );
+        currentPD.deadline = CalcTime._nextDayAndTime(
+            RSD.RD.ctbDay,
+            RSD.RD.occurrence
+        );
+        RSD.currentPotId = currentPD.potId;
+        RSD.currentPotBalance = currentPD.potBalance;
+        RSD.PS = PotState.isOpen;
+
+        emit CreatedPot(
+            currentPD.potOwner,
+            currentPD.deadline,
+            currentPD.payoutDate
+        );
+    }
+
     /// @notice Rosca getters
     /// @dev should get the RoscaSpaceDetails struct
     function getRoscaDetails()
@@ -150,79 +263,8 @@ contract Rosca {
         return RSD.members;
     }
 
-    /// @notice Rosca utility functions
-    /// @dev should return next timestamp from given schedule and day of week
-    /// @param _schDay 1 Monday
-    function _nextDayAndTime(
-        string memory _schDay
-    ) internal view returns (uint256 nextTimeStamp) {
-        uint256 day;
-        uint256 month;
-        uint256 year;
-        uint256 _ocurrance = _getOcurranceNo(RSD.RD.occurrence);
-        if (_ocurrance == 1) {
-            return block.timestamp.add(24 * 60 * 60);
-        } else {
-            uint256 _day = _getDayNo(_schDay);
-            uint256 _days = block.timestamp / (24 * 60 * 60);
-            uint256 dayOfWeek = ((_days + 3) % 7) + 1;
-            (year, month, day) = CalcTime._daysToDate(_days);
-            if (_ocurrance == 7) {
-                uint256 nextDay = day + ((7 + _day - dayOfWeek) % 7);
-                nextTimeStamp =
-                    CalcTime._daysFromDate(year, month, nextDay) *
-                    (24 * 60 * 60);
-                if (nextTimeStamp <= block.timestamp) {
-                    nextTimeStamp = nextTimeStamp.add(7 * (24 * 60 * 60));
-                }
-                return nextTimeStamp;
-            } else if (_ocurrance == 28) {
-                uint256 nextDay = day + ((28 + _day - dayOfWeek) % 28);
-                nextTimeStamp =
-                    CalcTime._daysFromDate(year, month, nextDay) *
-                    (24 * 60 * 60);
-                if (nextTimeStamp <= block.timestamp) {
-                    nextTimeStamp = nextTimeStamp.add(28 * (24 * 60 * 60));
-                }
-                return nextTimeStamp;
-            }
-        }
-    }
-
-    /// @dev return number of day from given day of week
-    /// @param _day 1. Monday
-    function _getDayNo(
-        string memory _day
-    ) internal pure returns (uint256 dayNo) {
-        string[7] memory weekList = [
-            "Monday",
-            "Tuesday",
-            "Wednesday",
-            "Thursday",
-            "Friday",
-            "Saturday",
-            "Sunday"
-        ];
-        bytes32 encodedElement = keccak256(abi.encode(_day));
-        for (uint256 i = 0; i < weekList.length; i++) {
-            if (encodedElement == keccak256(abi.encode(weekList[i]))) {
-                return i + 1;
-            }
-        }
-    }
-
-    /// @dev return number of ocurrance from given ocurrance
-    /// @param _ocurrance 1. Daily 7. Weekly 30 Monthly
-    function _getOcurranceNo(
-        string memory _ocurrance
-    ) internal pure returns (uint256 ocurranceNo) {
-        string[3] memory ocurranceList = ["Daily", "Weekly", "Monthly"];
-        uint8[3] memory ocurranceSize = [1, 7, 28];
-        bytes32 encodedElement = keccak256(abi.encode(_ocurrance));
-        for (uint256 i = 0; i < ocurranceList.length; i++) {
-            if (encodedElement == keccak256(abi.encode(ocurranceList[i]))) {
-                return ocurranceSize[i];
-            }
-        }
+    /// @dev should return when next pot is due
+    function nextPot() external view returns (uint256) {
+        return CalcTime._nextDayAndTime(RSD.RD.disbDay, RSD.RD.occurrence);
     }
 }
