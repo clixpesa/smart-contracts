@@ -54,6 +54,13 @@ contract Rosca {
         uint256 contributionDate;
     }
 
+    struct Transaction {
+        address to;
+        uint256 amount;
+        bool isExecuted;
+        uint256 numApprovals;
+    }
+
     struct PotDetails {
         uint256 potId;
         address potOwner;
@@ -79,7 +86,9 @@ contract Rosca {
     RoscaSpaceDetails RSD;
     string authCode;
     PotDetails currentPD;
-    mapping(address => uint256) memberIndex; //maz members 255
+    Transaction[] transactions;
+    mapping(uint => mapping(address => bool)) approvals;
+    mapping(address => uint256) memberIndex; //max members 255
 
     /// @notice Rosca events
     event JoinedRosca(address memberAddress, uint256 joinedAt);
@@ -90,6 +99,17 @@ contract Rosca {
     );
     event PotFunded(address memberAddress, uint256 amount);
     event PotPayedOut(address memberAddress, uint256 amount);
+    event WithdrawalRequest(
+        address memberAddress,
+        uint256 amount,
+        uint256 requestIdx
+    );
+    event WithdrawalApproved(address memberAddress, uint256 approvedAt);
+    event WithdrawalExecuted(
+        address memberAddress,
+        uint256 amount,
+        uint256 executedAt
+    );
 
     /// @notice Rosca Constructor
     constructor(
@@ -175,31 +195,100 @@ contract Rosca {
     }
 
     /// @notice Should payout the current pot
-    function payoutPot() external {
-        require(
-            RSD.RS == RoscaState.isLive,
-            "You can only payout a live Rosca"
-        );
-        require(
-            currentPD.potBalance == RSD.RD.goalAmount,
-            "Pot is not fully funded"
-        );
+    function payOutPot() external {
+        require(RSD.RS == RoscaState.isLive, "!RoscaIsLive");
+        require(currentPD.potBalance == RSD.RD.goalAmount, "!FullyFunded");
         uint256 dueAmount = currentPD.potBalance;
-        require(
-            RSD.currentPotId == memberIndex[msg.sender],
-            "You are not due to payout"
-        );
         require(
             RSD.RD.token.transfer(currentPD.potOwner, currentPD.potBalance),
             "Transfer failed"
         );
         RSD.currentPotBalance = 0;
-        currentPD.potBalance = 0;
         RSD.roscaBalance = RSD.RD.token.balanceOf(address(this));
         RSD.PS = PotState.isPayedOut;
-
-        emit PotPayedOut(msg.sender, dueAmount);
+        RSD.members[memberIndex[currentPD.potOwner].sub(1)].isPotted = true;
+        delete currentPD.contributions;
+        emit PotPayedOut(currentPD.potOwner, dueAmount);
         _createPot();
+    }
+
+    /// @notice Should request approval to withdraw from ROSCA
+    /// @param _amount the amount to withdraw
+    /// @param _member the member to send funds to
+    function withdrawalRequest(address _member, uint256 _amount) external {
+        require(
+            RSD.members[memberIndex[msg.sender].sub(1)].memberAddress ==
+                msg.sender,
+            "You are not a member"
+        );
+        require(
+            RSD.members[memberIndex[_member].sub(1)].memberAddress == _member,
+            "They are not a member"
+        );
+
+        uint256 requestIdx = transactions.length;
+        transactions.push(
+            Transaction({
+                to: _member,
+                amount: _amount,
+                isExecuted: false,
+                numApprovals: 0
+            })
+        );
+
+        RSD.roscaBalance = RSD.RD.token.balanceOf(address(this));
+
+        emit WithdrawalRequest(_member, _amount, requestIdx);
+    }
+
+    /// @notice Should approve a withdrawal request
+    /// @param _requestIdx the index of the request
+    function approveWithdrawalRequest(uint256 _requestIdx) external {
+        require(
+            RSD.members[memberIndex[msg.sender].sub(1)].memberAddress ==
+                msg.sender,
+            "You are not a member"
+        );
+        require(
+            transactions[_requestIdx].isExecuted == false,
+            "Transaction already executed"
+        );
+        require(
+            approvals[_requestIdx][msg.sender] == false,
+            "You have already approved this transaction"
+        );
+        approvals[_requestIdx][msg.sender] = true;
+        transactions[_requestIdx].numApprovals = transactions[_requestIdx]
+            .numApprovals
+            .add(1);
+
+        emit WithdrawalApproved(msg.sender, block.timestamp);
+        RSD.roscaBalance = RSD.RD.token.balanceOf(address(this));
+        if (transactions[_requestIdx].numApprovals >= 2) {
+            transactions[_requestIdx].isExecuted = true;
+            _withdrawFromRosca(
+                transactions[_requestIdx].amount,
+                transactions[_requestIdx].to
+            );
+        }
+    }
+
+    /// @notice Should withdraw from ROSCA
+    /// @dev Withdrawal should be approved by atleast 2 members
+    /// @param _amount the amount to withdraw
+    /// @param _member the member to send funds to
+    function _withdrawFromRosca(uint256 _amount, address _member) internal {
+        require(
+            RSD.RS == RoscaState.isLive,
+            "You can only withdraw from a live Rosca"
+        );
+        require(
+            RSD.RD.token.balanceOf(address(this)) >= _amount,
+            "!InsufficientFunds"
+        );
+        require(RSD.RD.token.transfer(_member, _amount), "Transfer failed");
+        RSD.roscaBalance = RSD.RD.token.balanceOf(address(this));
+        emit WithdrawalExecuted(_member, _amount, block.timestamp);
     }
 
     /// @notice Should create a new pot
@@ -234,7 +323,6 @@ contract Rosca {
         RSD.currentPotId = currentPD.potId;
         RSD.currentPotBalance = currentPD.potBalance;
         RSD.PS = PotState.isOpen;
-
         emit CreatedPot(
             currentPD.potOwner,
             currentPD.deadline,

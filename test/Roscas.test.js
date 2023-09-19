@@ -88,4 +88,52 @@ describe('Clixpesa Rosca Spaces', function () {
     const newRoscaBal = await Token.balanceOf(Rosca.address)
     expect(newRoscaBal).to.be.equal(ctbAmount)
   })
+
+  it('Should pay out the pot', async function () {
+    const ctbAmount = ethers.utils.parseUnits('0.1', tokenDecimals).toString()
+    await Token.connect(addr2).approve(Rosca.address, ctbAmount)
+    await delay(5000)
+    const add1Bal = await Token.balanceOf(addr1.address)
+    await Rosca.connect(addr2).contributeToPot(ctbAmount)
+    const potDetails = await Rosca.getCurrentPotDetails()
+    const txResponse = await Rosca.connect(addr1).payOutPot()
+    const txReceipt = await txResponse.wait()
+    const thisLog = txReceipt.logs.find((el) => el.address === Rosca.address)
+    const results = RoscaIface.parseLog({ data: thisLog.data, topics: thisLog.topics })
+    expect(results.args.memberAddress).to.be.equal(addr1.address)
+    expect(results.args.amount).to.be.equal(potDetails.potBalance)
+    const newRoscaBal = await Token.balanceOf(Rosca.address)
+    const newAddr1Bal = await Token.balanceOf(addr1.address)
+    expect(newRoscaBal).to.be.equal(0)
+    expect(newAddr1Bal).to.be.greaterThan(add1Bal)
+  })
+
+it('Should withdraw from the rosca', async function () {
+  // add3 tranfer 2 tokens to rosca
+  const ctbAmount = ethers.utils.parseUnits('2', tokenDecimals).toString()
+  const withdrawAmount = ethers.utils.parseUnits('1', tokenDecimals).toString()
+  await Token.connect(addr3).transfer(Rosca.address, ctbAmount)
+  await delay(3000)
+  const roscaBal = await Token.balanceOf(Rosca.address)
+  const add2Bal = await Token.balanceOf(addr2.address)
+  expect(roscaBal).to.be.equal(ctbAmount)
+  // add2 makes withdrawal request
+  const txResponse = await Rosca.connect(addr2).withdrawalRequest(
+    addr2.address,
+    withdrawAmount
+  )
+  const txReceipt = await txResponse.wait()
+  const thisLog = txReceipt.logs.find((el) => el.address === Rosca.address)
+  const results = RoscaIface.parseLog({ data: thisLog.data, topics: thisLog.topics })
+  expect(results.args.requestIdx).to.be.equal(0)
+  // add1 and add2 approves withdrawal
+  await Rosca.connect(addr2).approveWithdrawalRequest(0)
+  await Rosca.connect(addr1).approveWithdrawalRequest(0)
+  const newRoscaBal = await Token.balanceOf(Rosca.address)
+  expect(newRoscaBal).to.be.equal(roscaBal.sub(withdrawAmount))
+  const newAddr2Bal = await Token.balanceOf(addr2.address)
+  expect(newAddr2Bal).to.be.equal(add2Bal.add(withdrawAmount))
+
+
+})
 }) 
