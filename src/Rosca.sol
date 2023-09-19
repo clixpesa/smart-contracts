@@ -184,22 +184,21 @@ contract Rosca {
             currentPD.potBalance == RSD.RD.goalAmount,
             "Pot is not fully funded"
         );
+        uint256 dueAmount = currentPD.potBalance;
         require(
             RSD.currentPotId == memberIndex[msg.sender],
             "You are not due to payout"
         );
         require(
-            RSD.RD.token.transfer(
-                currentPD.potOwner,
-                currentPD.potBalance.sub(RSD.RD.goalAmount)
-            ),
+            RSD.RD.token.transfer(currentPD.potOwner, currentPD.potBalance),
             "Transfer failed"
         );
         RSD.currentPotBalance = 0;
+        currentPD.potBalance = 0;
         RSD.roscaBalance = RSD.RD.token.balanceOf(address(this));
         RSD.PS = PotState.isPayedOut;
 
-        emit PotPayedOut(msg.sender, currentPD.potBalance);
+        emit PotPayedOut(msg.sender, dueAmount);
         _createPot();
     }
 
