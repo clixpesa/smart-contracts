@@ -25,6 +25,10 @@ struct RoscaDetails {
 contract Rosca {
     using SafeMath for uint256;
 
+    /// @notice Rosca currency
+    IERC20 immutable TOKEN;
+
+    /// @notice Rosca enums
     enum PotState {
         isOpen,
         isClosed,
@@ -118,6 +122,7 @@ contract Rosca {
         address _creator
     ) {
         RSD.RD = _RD;
+        TOKEN = _RD.token;
         RSD.creator = _creator;
         authCode = _aCode;
         Member memory firstMember = Member({
@@ -171,15 +176,10 @@ contract Rosca {
             "You can only contribute to an open pot"
         );
         require(
-            RSD.RD.token.allowance(msg.sender, address(this)) >= _amount,
+            TOKEN.allowance(msg.sender, address(this)) >= _amount,
             "You need to approve the token first"
         );
-        require(
-            RSD.RD.token.transferFrom(msg.sender, address(this), _amount),
-            "Transfer failed"
-        );
         RSD.currentPotBalance = RSD.currentPotBalance.add(_amount);
-        RSD.roscaBalance = RSD.RD.token.balanceOf(address(this));
         currentPD.potBalance = currentPD.potBalance.add(_amount);
         currentPD.contributions.push(
             Contribution({
@@ -191,6 +191,11 @@ contract Rosca {
         if (currentPD.potBalance == RSD.RD.goalAmount) {
             RSD.PS = PotState.isClosed;
         }
+        require(
+            TOKEN.transferFrom(msg.sender, address(this), _amount),
+            "Transfer failed"
+        );
+        RSD.roscaBalance = TOKEN.balanceOf(address(this));
         emit PotFunded(msg.sender, _amount);
     }
 
@@ -199,15 +204,15 @@ contract Rosca {
         require(RSD.RS == RoscaState.isLive, "!RoscaIsLive");
         require(currentPD.potBalance == RSD.RD.goalAmount, "!FullyFunded");
         uint256 dueAmount = currentPD.potBalance;
-        require(
-            RSD.RD.token.transfer(currentPD.potOwner, currentPD.potBalance),
-            "Transfer failed"
-        );
         RSD.currentPotBalance = 0;
-        RSD.roscaBalance = RSD.RD.token.balanceOf(address(this));
+        RSD.roscaBalance = TOKEN.balanceOf(address(this));
         RSD.PS = PotState.isPayedOut;
         RSD.members[memberIndex[currentPD.potOwner].sub(1)].isPotted = true;
         delete currentPD.contributions;
+        require(
+            TOKEN.transfer(currentPD.potOwner, currentPD.potBalance),
+            "Transfer failed"
+        );
         emit PotPayedOut(currentPD.potOwner, dueAmount);
         _createPot();
     }
@@ -236,7 +241,7 @@ contract Rosca {
             })
         );
 
-        RSD.roscaBalance = RSD.RD.token.balanceOf(address(this));
+        RSD.roscaBalance = TOKEN.balanceOf(address(this));
 
         emit WithdrawalRequest(_member, _amount, requestIdx);
     }
@@ -263,7 +268,7 @@ contract Rosca {
             .add(1);
 
         emit WithdrawalApproved(msg.sender, block.timestamp);
-        RSD.roscaBalance = RSD.RD.token.balanceOf(address(this));
+        RSD.roscaBalance = TOKEN.balanceOf(address(this));
         if (transactions[_requestIdx].numApprovals >= 2) {
             transactions[_requestIdx].isExecuted = true;
             _withdrawFromRosca(
@@ -283,11 +288,11 @@ contract Rosca {
             "You can only withdraw from a live Rosca"
         );
         require(
-            RSD.RD.token.balanceOf(address(this)) >= _amount,
+            TOKEN.balanceOf(address(this)) >= _amount,
             "!InsufficientFunds"
         );
-        require(RSD.RD.token.transfer(_member, _amount), "Transfer failed");
-        RSD.roscaBalance = RSD.RD.token.balanceOf(address(this));
+        RSD.roscaBalance = TOKEN.balanceOf(address(this));
+        require(TOKEN.transfer(_member, _amount), "Transfer failed");
         emit WithdrawalExecuted(_member, _amount, block.timestamp);
     }
 
