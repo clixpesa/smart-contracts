@@ -5,7 +5,7 @@
 @notice Allow users to borrow and lend funds to each other in a P2P fashion.
 */
 
-pragma solidity ^0.8.19;
+pragma solidity 0.8.19;
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./LoansInterest.sol";

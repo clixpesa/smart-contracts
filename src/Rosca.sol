@@ -5,7 +5,7 @@
 @notice Allow users to save in group with a rotating pot. Deployed by RoscaSpaces.
 */
 
-pragma solidity ^0.8.19;
+pragma solidity 0.8.19;
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./CalcTime.sol";
@@ -74,6 +74,11 @@ contract Rosca {
         uint256 deadline;
         Contribution[] contributions;
     }
+
+    struct PotExcess {
+        uint256 potId;
+        uint256 excessAmount;
+    }
     /// @dev RoscaSpaceDetails struct for this Rosca
     struct RoscaSpaceDetails {
         RoscaDetails RD;
@@ -88,6 +93,7 @@ contract Rosca {
 
     /// @notice Rosca variables
     RoscaSpaceDetails RSD;
+    PotExcess[] potExcesses;
     string authCode;
     PotDetails currentPD;
     Transaction[] transactions;
@@ -150,6 +156,7 @@ contract Rosca {
             memberIndex[msg.sender] == 0,
             "You are already a member of this Rosca"
         );
+        require(RSD.members.length <= 255, "Rosca is full"); //max 255 members
         uint256 joinedAt = block.timestamp;
 
         Member memory newMember = Member({
@@ -179,6 +186,11 @@ contract Rosca {
             TOKEN.allowance(msg.sender, address(this)) >= _amount,
             "You need to approve the token first"
         );
+        require(
+            RSD.RD.goalAmount.sub(currentPD.potBalance) >= _amount,
+            "Pot will be overfunded"
+        );
+
         RSD.currentPotBalance = RSD.currentPotBalance.add(_amount);
         currentPD.potBalance = currentPD.potBalance.add(_amount);
         currentPD.contributions.push(
@@ -201,18 +213,32 @@ contract Rosca {
 
     /// @notice Should payout the current pot
     function payOutPot() external {
+        uint256 dueAmount;
         require(RSD.RS == RoscaState.isLive, "!RoscaIsLive");
-        require(currentPD.potBalance == RSD.RD.goalAmount, "!FullyFunded");
-        uint256 dueAmount = currentPD.potBalance;
+        require(currentPD.potBalance >= RSD.RD.goalAmount, "!FullyFunded");
+        if (currentPD.potBalance > RSD.RD.goalAmount) {
+            //Keep excess in the Rosca
+            dueAmount = RSD.RD.goalAmount;
+            uint256 excessAmount = currentPD.potBalance.sub(RSD.RD.goalAmount);
+            potExcesses.push(
+                PotExcess({potId: currentPD.potId, excessAmount: excessAmount})
+            );
+        } else if (currentPD.potBalance == RSD.RD.goalAmount) {
+            //Transfer all funds to potOwner
+            dueAmount = currentPD.potBalance;
+        }
+        currentPD.potBalance = 0;
         RSD.currentPotBalance = 0;
-        RSD.roscaBalance = TOKEN.balanceOf(address(this));
         RSD.PS = PotState.isPayedOut;
+        //change is potted to true
         RSD.members[memberIndex[currentPD.potOwner].sub(1)].isPotted = true;
-        delete currentPD.contributions;
+
         require(
-            TOKEN.transfer(currentPD.potOwner, currentPD.potBalance),
+            TOKEN.transfer(currentPD.potOwner, dueAmount),
             "Transfer failed"
         );
+        RSD.roscaBalance = TOKEN.balanceOf(address(this));
+        delete currentPD.contributions;
         emit PotPayedOut(currentPD.potOwner, dueAmount);
         _createPot();
     }

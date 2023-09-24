@@ -5,7 +5,7 @@
 @notice Allow users to save in group with a rotating pot.
 */
 
-pragma solidity ^0.8.19;
+pragma solidity 0.8.19;
 
 import "./Rosca.sol";
 

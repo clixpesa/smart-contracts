@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache 2.0
-pragma solidity ^0.8.19;
+pragma solidity 0.8.19;
 
 library CalcTime {
     uint constant SECONDS_PER_DAY = 24 * 60 * 60;

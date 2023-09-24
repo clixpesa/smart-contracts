@@ -89,6 +89,13 @@ describe('Clixpesa Rosca Spaces', function () {
     expect(newRoscaBal).to.be.equal(ctbAmount)
   })
 
+  it("ADD2 Should not over fund to the pot", async function () {
+    const ctbAmount = ethers.utils.parseUnits('0.2', tokenDecimals).toString()
+    await Token.connect(addr2).approve(Rosca.address, ctbAmount)
+    await delay(5000)
+   await expect(Rosca.connect(addr2).contributeToPot(ctbAmount)).to.be.revertedWith('Pot will be overfunded')
+  })
+
   it('Should pay out the pot', async function () {
     const ctbAmount = ethers.utils.parseUnits('0.1', tokenDecimals).toString()
     await Token.connect(addr2).approve(Rosca.address, ctbAmount)
@@ -106,6 +113,8 @@ describe('Clixpesa Rosca Spaces', function () {
     const newAddr1Bal = await Token.balanceOf(addr1.address)
     expect(newRoscaBal).to.be.equal(0)
     expect(newAddr1Bal).to.be.greaterThan(add1Bal)
+    const memberAddress = await Rosca.getMembers()
+    expect(memberAddress.find((el) => el.memberAddress === addr1.address).isPotted).to.be.equal(true)
   })
 
 it('Should withdraw from the rosca', async function () {

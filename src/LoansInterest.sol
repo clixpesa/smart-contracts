@@ -5,7 +5,7 @@
 @notice Get the amount of interest to be paid on a loan
 */
 
-pragma solidity ^0.8.19;
+pragma solidity 0.8.19;
 
 import {UD60x18, ud, convert} from "@prb/math/src/UD60x18.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
