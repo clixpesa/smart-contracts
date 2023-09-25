@@ -40,20 +40,56 @@ contract RoscaSpaces {
         emit RoscaSpaceCreated(address(newRosca), msg.sender, _RD.roscaName);
     }
 
-    function getRoscaSpaces() public view returns (Rosca[] memory) {
-        return roscaSpaces;
+    /// @notice Should end and archive RoscaSpace
+    function endRoscaSpace(address _roscaAddress) public {
+        Rosca rosca = Rosca(_roscaAddress);
+        rosca.endRosca();
+    }
+
+    function getRoscaSpaces(
+        uint _startIdx,
+        uint _howMany
+    ) public view returns (Rosca[] memory, uint newStartIdx) {
+        uint length = _howMany;
+        if (length > roscaSpaces.length - _startIdx) {
+            length = roscaSpaces.length - _startIdx;
+        }
+        Rosca[] memory thisRoscaSpaces = new Rosca[](length);
+        for (uint256 i = 0; i < length; i++) {
+            thisRoscaSpaces[i] = roscaSpaces[_startIdx + i];
+        }
+        if (length < _howMany) {
+            return (thisRoscaSpaces, 0);
+        }
+        return (thisRoscaSpaces, _startIdx + length);
     }
 
     function getRoscaSpacesByOwner(
         address _owner
     ) public view returns (Rosca[] memory) {
-        return myRoscas[_owner];
+        //check if _owner is member of rosca
+        Rosca[] memory roscaSpacesByOwner = myRoscas[_owner];
+        for (uint256 i = 0; i < roscaSpacesByOwner.length; i++) {
+            if (roscaSpacesByOwner[i].isMember(_owner) == false) {
+                delete roscaSpacesByOwner[i];
+            }
+        }
+        return roscaSpacesByOwner;
     }
 
     function getRoscaSpaceByOwnernAddress(
         address _owner,
         address _roscaAddress
     ) public view returns (Rosca) {
+        require(
+            myRoscasIdx[_owner][_roscaAddress] <= myRoscas[_owner].length - 1,
+            "RoscaSpaces: RoscaSpace not found"
+        );
+        require(
+            myRoscas[_owner][myRoscasIdx[_owner][_roscaAddress]] ==
+                Rosca(_roscaAddress),
+            "RoscaSpaces: RoscaSpace not found"
+        );
         return myRoscas[_owner][myRoscasIdx[_owner][_roscaAddress]];
     }
 

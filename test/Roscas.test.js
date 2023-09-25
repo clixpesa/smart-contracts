@@ -5,7 +5,6 @@ const {customAlphabet} = require('nanoid')
 const nanoid = customAlphabet('1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ', 10)
 const config = require('./config.js')
 const { time } = require('@nomicfoundation/hardhat-network-helpers')
-const exp = require('constants')
 
 describe('Clixpesa Rosca Spaces', function () {
   let RoscaSpaces, RoscaSpacesIface, Rosca, RoscaIface, Token, addr1, addr2, addr3, inviteCode, tokenDecimals
@@ -117,32 +116,42 @@ describe('Clixpesa Rosca Spaces', function () {
     expect(memberAddress.find((el) => el.memberAddress === addr1.address).isPotted).to.be.equal(true)
   })
 
-it('Should withdraw from the rosca', async function () {
-  // add3 tranfer 2 tokens to rosca
-  const ctbAmount = ethers.utils.parseUnits('2', tokenDecimals).toString()
-  const withdrawAmount = ethers.utils.parseUnits('1', tokenDecimals).toString()
-  await Token.connect(addr3).transfer(Rosca.address, ctbAmount)
-  await delay(3000)
-  const roscaBal = await Token.balanceOf(Rosca.address)
-  const add2Bal = await Token.balanceOf(addr2.address)
-  expect(roscaBal).to.be.equal(ctbAmount)
-  // add2 makes withdrawal request
-  const txResponse = await Rosca.connect(addr2).withdrawalRequest(
-    addr2.address,
-    withdrawAmount
-  )
-  const txReceipt = await txResponse.wait()
-  const thisLog = txReceipt.logs.find((el) => el.address === Rosca.address)
-  const results = RoscaIface.parseLog({ data: thisLog.data, topics: thisLog.topics })
-  expect(results.args.requestIdx).to.be.equal(0)
-  // add1 and add2 approves withdrawal
-  await Rosca.connect(addr2).approveWithdrawalRequest(0)
-  await Rosca.connect(addr1).approveWithdrawalRequest(0)
-  const newRoscaBal = await Token.balanceOf(Rosca.address)
-  expect(newRoscaBal).to.be.equal(roscaBal.sub(withdrawAmount))
-  const newAddr2Bal = await Token.balanceOf(addr2.address)
-  expect(newAddr2Bal).to.be.equal(add2Bal.add(withdrawAmount))
+  it('Should withdraw from the rosca', async function () {
+    // add3 tranfer 2 tokens to rosca
+    const ctbAmount = ethers.utils.parseUnits('2', tokenDecimals).toString()
+    const withdrawAmount = ethers.utils.parseUnits('1', tokenDecimals).toString()
+    await Token.connect(addr3).transfer(Rosca.address, ctbAmount)
+    await delay(3000)
+    const roscaBal = await Token.balanceOf(Rosca.address)
+    const add2Bal = await Token.balanceOf(addr2.address)
+    expect(roscaBal).to.be.equal(ctbAmount)
+    // add2 makes withdrawal request
+    const txResponse = await Rosca.connect(addr2).withdrawalRequest(
+      addr2.address,
+      withdrawAmount
+    )
+    const txReceipt = await txResponse.wait()
+    const thisLog = txReceipt.logs.find((el) => el.address === Rosca.address)
+    const results = RoscaIface.parseLog({ data: thisLog.data, topics: thisLog.topics })
+    expect(results.args.requestIdx).to.be.equal(0)
+    // add1 and add2 approves withdrawal
+    await Rosca.connect(addr2).approveWithdrawalRequest(0)
+    await Rosca.connect(addr1).approveWithdrawalRequest(0)
+    const newRoscaBal = await Token.balanceOf(Rosca.address)
+    expect(newRoscaBal).to.be.equal(roscaBal.sub(withdrawAmount))
+    const newAddr2Bal = await Token.balanceOf(addr2.address)
+    expect(newAddr2Bal).to.be.equal(add2Bal.add(withdrawAmount))
+  })
 
+  it('Should return ADD1 spaces ', async function () {
+    const spaces = await RoscaSpaces.getRoscaSpacesByOwner(addr1.address)
+    expect(spaces.length).to.be.equal(1)
+  })
 
-})
+  it('Should return paginated spaces ', async function () {
+    const spaces = await RoscaSpaces.getRoscaSpaces(0, 10)
+    expect(spaces[0].length).to.be.equal(1)
+    expect(spaces[1]).to.be.equal(0)
+  })
+
 }) 

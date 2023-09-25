@@ -18,6 +18,13 @@ library LoanInterest {
         uint256 _rate,
         uint256 _duration
     ) internal pure returns (uint256) {
+        require(_amount > 0, "Amount must be greater than 0");
+        //require rate is greater than 0 and less than 100 basis points
+        require(
+            _rate > 0 && _rate < 10000,
+            "Rate must be > 0 and < 10000 basis points"
+        );
+        require(_duration > 0, "Duration must be greater than 0");
         UD60x18 thisAmt = convert(_amount); //AmountInEther*1e18
         UD60x18 thisRate = convert(_rate);
         UD60x18 rateAsec = thisRate.div(ud(10000e18)).div(ud(31536000e18));
@@ -32,6 +39,13 @@ library LoanInterest {
         uint256 _rate,
         uint256 _duration
     ) internal pure returns (uint256) {
+        require(_amount > 0, "Amount must be greater than 0");
+        //require rate is greater than 0 and less than 100 basis points
+        require(
+            _rate > 0 && _rate < 10000,
+            "Rate must be > 0 and < 10000 basis points"
+        );
+        require(_duration > 0, "Duration must be greater than 0");
         uint256 _interest = _getInterest(_amount, _rate, _duration);
         uint256 _newBalance = _amount.add(_interest);
         return _newBalance;

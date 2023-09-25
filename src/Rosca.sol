@@ -8,6 +8,7 @@
 pragma solidity 0.8.19;
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
 import "./CalcTime.sol";
 import "hardhat/console.sol";
 
@@ -22,7 +23,7 @@ struct RoscaDetails {
     string occurrence;
 }
 
-contract Rosca {
+contract Rosca is Pausable {
     using SafeMath for uint256;
 
     /// @notice Rosca currency
@@ -141,6 +142,35 @@ contract Rosca {
         RSD.members.push(firstMember);
         memberIndex[_creator] = RSD.members.length;
         _createPot();
+    }
+
+    /// @notice Rosca modifiers
+    modifier onlyMember() {
+        require(
+            RSD.members[memberIndex[msg.sender].sub(1)].memberAddress ==
+                msg.sender,
+            "You are not a member"
+        );
+        _;
+    }
+
+    modifier onlyAdmin() {
+        require(
+            RSD.members[memberIndex[msg.sender].sub(1)].isAdmin == true,
+            "You are not an admin"
+        );
+        _;
+    }
+
+    /// @notice Rosca pausable functions
+    /// @notice Should pause the Rosca
+    function pause() external onlyAdmin {
+        _pause();
+    }
+
+    /// @notice Should unpause the Rosca
+    function unpause() external onlyAdmin {
+        _unpause();
     }
 
     /// @notice Rosca functions
@@ -274,12 +304,7 @@ contract Rosca {
 
     /// @notice Should approve a withdrawal request
     /// @param _requestIdx the index of the request
-    function approveWithdrawalRequest(uint256 _requestIdx) external {
-        require(
-            RSD.members[memberIndex[msg.sender].sub(1)].memberAddress ==
-                msg.sender,
-            "You are not a member"
-        );
+    function approveWithdrawalRequest(uint256 _requestIdx) external onlyMember {
         require(
             transactions[_requestIdx].isExecuted == false,
             "Transaction already executed"
@@ -361,6 +386,20 @@ contract Rosca {
         );
     }
 
+    /// @notice Should end Rosca
+    function endRosca() external {
+        require(
+            RSD.members[memberIndex[msg.sender].sub(1)].isAdmin == true,
+            "You are not an admin"
+        );
+        require(RSD.RS == RoscaState.isLive, "Rosca is not live");
+        require(
+            RSD.currentPotBalance == 0,
+            "You cannot end a live Rosca with a pending pot"
+        );
+        RSD.RS = RoscaState.isEnded;
+    }
+
     /// @notice Rosca getters
     /// @dev should get the RoscaSpaceDetails struct
     function getRoscaDetails()
@@ -379,6 +418,15 @@ contract Rosca {
     /// @dev should get the list of members
     function getMembers() external view returns (Member[] memory) {
         return RSD.members;
+    }
+
+    /// @dev should check if member is in Rosca
+    function isMember(address _member) external view returns (bool) {
+        if (memberIndex[_member] == 0) {
+            return false;
+        } else {
+            return true;
+        }
     }
 
     /// @dev should return when next pot is due

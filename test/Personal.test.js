@@ -139,6 +139,20 @@ describe('Clixpesa Personal Spaces', function () {
     expect(results.args[0].currentBalance).to.be.equal(personalSpaces[0].currentBalance)
   })
 
+  it('Should NOT update space token', async function () {
+    const personalSpaces = await Personal.getPersonalSpacesByOwner(addr2.address)
+    const savingsData = {
+      token: "0x9Ae90C20aFCEDA659bDbC5F77A09f1A5771F140f",
+      owner: personalSpaces[0].SD.owner,
+      spaceName: 'Mjengo Mpya',
+      imgLink: personalSpaces[0].SD.imgLink,
+      spaceId: personalSpaces[0].SD.spaceId,
+      goalAmount: ethers.utils.parseUnits('2.5', tokenDecimals).toString(),
+      deadline: personalSpaces[0].SD.deadline
+    }
+    await expect(Personal.connect(addr2).updatePersonalSpace(Object.values(savingsData))).to.be.revertedWith("Token cannot be changed")
+  })
+
   it('Should not withdraw from ADD2 personal space', async function () {
     const amount = ethers.utils.parseUnits('1', tokenDecimals)
     const personalSpaces = await Personal.getPersonalSpacesByOwner(addr2.address)
