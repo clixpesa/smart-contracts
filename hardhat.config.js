@@ -36,7 +36,6 @@ module.exports = {
       },
       forking: {
        url: "https://alfajores-forno.celo-testnet.org",//'https://erpc.apothem.network/'
-
       }
     },
     localhost: {

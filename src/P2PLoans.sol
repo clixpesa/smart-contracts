@@ -5,7 +5,7 @@
 @notice Allow users to borrow and lend funds to each other in a P2P fashion.
 */
 
-pragma solidity ^0.8.19;
+pragma solidity 0.8.19;
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./LoansInterest.sol";
@@ -106,9 +106,10 @@ contract P2PLoans {
     /// @param LRD LoanDetails struct
     function createLoanRequest(LoanRequestDetails memory LRD) external {
         require(LRD.LD.initiator == msg.sender, "MBO");
-        require(LRD.LD.principal > 0, "Principal<0");
-        require(LRD.LD.interest > 0, "Interest<0");
-        require(LRD.LD.minDuration > 0 && LRD.LD.maxDuration > 0, "Duration<0");
+        require(LRD.LD.principal > 0, "!Principal");
+        require(LRD.LD.interest > 0, "!Interest");
+        require(LRD.LD.token != IERC20(address(0)), "!Token");
+        require(LRD.LD.minDuration > 0 && LRD.LD.maxDuration > 0, "!Duration");
         require(LRD.LD.minDuration <= LRD.LD.maxDuration, "MinD > MaxD");
 
         allRequests.push(LRD);
@@ -126,7 +127,7 @@ contract P2PLoans {
     function fundLoanRequest(
         string memory _requestId,
         string memory _loanId
-    ) external payable {
+    ) external {
         // get the loan request
         require(requestIndex[_requestId] != 0, "!Request");
         LoanRequestDetails memory _thisRequest = allRequests[
@@ -135,9 +136,9 @@ contract P2PLoans {
 
         require(_thisRequest.LD.initiator != msg.sender, "!Self");
         require(
-            _thisRequest.LD.token.balanceOf(msg.sender) >=
+            _thisRequest.LD.token.allowance(msg.sender, address(this)) >=
                 _thisRequest.LD.principal,
-            "<Balance"
+            "<Bal"
         );
         /// @dev transfer funds to borrower
         require(
@@ -167,10 +168,7 @@ contract P2PLoans {
 
     /// @notice Repay a loan
     /// @param _loanId Loan ID
-    function repayLoan(
-        string memory _loanId,
-        uint256 _amount
-    ) external payable {
+    function repayLoan(string memory _loanId, uint256 _amount) external {
         // get the loan request
         require(p2pLoanIndex[_loanId] != 0, "!Loan");
         require(
@@ -188,6 +186,13 @@ contract P2PLoans {
         require(
             allP2PLoans[p2pLoanIndex[_loanId].sub(1)].currentBalance >= _amount,
             ">Amount"
+        );
+        require(
+            allP2PLoans[p2pLoanIndex[_loanId].sub(1)].LD.token.allowance(
+                msg.sender,
+                address(this)
+            ) >= _amount,
+            "!Alw"
         );
         /// @dev transfer funds to lender
         require(
@@ -238,10 +243,11 @@ contract P2PLoans {
     /// @param LOD LoanDetails struct
     function createLoanOffer(LoanOfferDetails memory LOD) external {
         require(LOD.LD.initiator == msg.sender, "MBO");
-        require(LOD.LD.principal > 0, "Interest>0");
-        require(LOD.LD.interest > 0, "Interest>0");
-        require(LOD.LD.minDuration > 0 && LOD.LD.maxDuration > 0, "Duration>0");
-        require(LOD.minLoanAmount > 0 && LOD.maxLoanAmount > 0, "LoanAmount>0");
+        require(LOD.LD.principal > 0, "!Interest");
+        require(LOD.LD.interest > 0, "!Interest");
+        require(LOD.LD.token != IERC20(address(0)), "!Token");
+        require(LOD.LD.minDuration > 0 && LOD.LD.maxDuration > 0, "!Duration");
+        require(LOD.minLoanAmount > 0 && LOD.maxLoanAmount > 0, "!LoanAmount");
         require(LOD.LD.minDuration <= LOD.LD.maxDuration, "!Duration");
 
         allOffers.push(LOD);
@@ -309,6 +315,14 @@ contract P2PLoans {
             allP2PLoans[p2pLoanIndex[_loanId].sub(1)].LS == LoanState.isPending,
             "!Pending"
         );
+        /*
+        require(
+            allP2PLoans[p2pLoanIndex[_loanId].sub(1)].LD.token.allowance(
+                msg.sender,
+                address(this)
+            ) >= allP2PLoans[p2pLoanIndex[_loanId].sub(1)].LD.principal,
+            "!Alw"
+        );*/
 
         /// @dev transfer funds to borrower
         require(
@@ -511,7 +525,6 @@ contract P2PLoans {
                 allP2PLoans[p2pLoanIndex[_loanId].sub(1)].updatedAt
             )
         );
-        console.log("New Balance: %s", _newBalance);
         //update loan balance and timestamp
         allP2PLoans[p2pLoanIndex[_loanId].sub(1)].currentBalance = allP2PLoans[
             p2pLoanIndex[_loanId].sub(1)

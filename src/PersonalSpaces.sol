@@ -5,13 +5,19 @@
 @notice Allow users to create saving goals and save towards them.
 */
 
-pragma solidity ^0.8.19;
+pragma solidity 0.8.19;
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "hardhat/console.sol";
 
 contract PersonalSpaces {
     using SafeMath for uint256;
 
+    /// @notice Space currency
+    // map immutable to token address and space id
+    mapping(string => IERC20) public spaceCurrency;
+
+    //Personal Space Enums
     enum FundsState {
         isFundable,
         isFullyFunded
@@ -64,6 +70,15 @@ contract PersonalSpaces {
 
     function createPersonalSpace(SpaceDetails memory _SD) external {
         require(msg.sender == _SD.owner, "Must be owner");
+        require(
+            bytes(_SD.spaceName).length > 0 &&
+                bytes(_SD.spaceName).length <= 40,
+            "!Space Name"
+        );
+        require(
+            bytes(_SD.spaceId).length > 0 && bytes(_SD.spaceId).length <= 15,
+            "!Space Id"
+        );
         require(personalSpaceIndex[_SD.spaceId] == 0, "SpaceId already exists");
         require(
             myPersonalSpaceIdx[msg.sender][_SD.spaceId] == 0,
@@ -71,10 +86,8 @@ contract PersonalSpaces {
         );
         require(_SD.owner != address(0), "Owner cannot be 0 address");
         require(_SD.token != IERC20(address(0)), "Token cannot be 0 address");
-        require(bytes(_SD.spaceName).length > 0, "Name cannot be empty");
         require(_SD.deadline > block.timestamp, "Deadline must be in future");
         require(_SD.goalAmount > 0, "Goal must be greater than 0");
-
         SpaceStates memory _SS = SpaceStates(
             FundsState.isFundable,
             ActivityState.isActive
@@ -133,6 +146,7 @@ contract PersonalSpaces {
         if (myPersonalSpaceIdx[owner][_spaceId] == 0) {
             return false;
         }
+        return true;
     }
 
     function updatePersonalSpace(SpaceDetails memory _SD) external {
@@ -143,7 +157,13 @@ contract PersonalSpaces {
             "SpaceId does not exist"
         );
         require(_SD.owner != address(0), "Owner cannot be 0 address");
-        require(_SD.token != IERC20(address(0)), "Token cannot be 0 address");
+        require(
+            _SD.token ==
+                allPersonalSpaces[personalSpaceIndex[_SD.spaceId].sub(1)]
+                    .SD
+                    .token,
+            "Token cannot be changed"
+        );
         require(bytes(_SD.spaceName).length > 0, "Name cannot be empty");
         require(_SD.deadline > block.timestamp, "Deadline must be in future");
         require(_SD.goalAmount > 0, "Goal must be greater than 0");
@@ -191,13 +211,15 @@ contract PersonalSpaces {
             _PD.SD.deadline > block.timestamp,
             "Deadline must be in future"
         );
-        require(_PD.SD.goalAmount > 0, "Goal must be greater than 0");
-        require(_amount > 0, "Amount must be greater than 0");
+        require(
+            _PD.SD.token.allowance(msg.sender, address(this)) >= _amount,
+            "You need to approve the token first"
+        );
         require(
             _PD.SD.token.transferFrom(msg.sender, address(this), _amount),
             "Transfer failed"
         );
-        //_PD.token.transferFrom(msg.sender, address(this), _amount);
+
         allPersonalSpaces[personalSpaceIndex[_spaceId].sub(1)]
             .currentBalance = _PD.currentBalance.add(_amount);
         myPersonalSpaces[msg.sender][
@@ -244,13 +266,13 @@ contract PersonalSpaces {
             _PD.currentBalance >= _amount,
             "Amount must be less than current balance"
         );
-        require(_PD.SD.token.transfer(msg.sender, _amount), "Transfer failed");
         allPersonalSpaces[personalSpaceIndex[_spaceId].sub(1)]
             .currentBalance = _PD.currentBalance.sub(_amount);
         myPersonalSpaces[msg.sender][
             myPersonalSpaceIdx[msg.sender][_spaceId].sub(1)
         ].currentBalance = _PD.currentBalance.sub(_amount);
 
+        require(_PD.SD.token.transfer(msg.sender, _amount), "Transfer failed");
         emit WithdrawnPersonalSpace(msg.sender, _spaceId, _amount);
 
         //check if current balance is less than goal amount and change state
@@ -287,8 +309,14 @@ contract PersonalSpaces {
             personalSpaceIndex[_spaceId].sub(1)
         ];
         require(_PD.SD.owner == msg.sender, "Must be owner");
+        require(
+            _PD.SS.currentActivityState == ActivityState.isActive,
+            "Space must be active"
+        );
 
-        _withdrawFromPersonalSpace(_spaceId, _PD.currentBalance);
+        if (_PD.currentBalance > 0) {
+            _withdrawFromPersonalSpace(_spaceId, _PD.currentBalance);
+        }
 
         allPersonalSpaces[personalSpaceIndex[_spaceId].sub(1)]
             .SS

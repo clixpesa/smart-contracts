@@ -5,9 +5,10 @@
 @notice Allow users to save in group with a rotating pot. Deployed by RoscaSpaces.
 */
 
-pragma solidity ^0.8.19;
+pragma solidity 0.8.19;
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
 import "./CalcTime.sol";
 import "hardhat/console.sol";
 
@@ -22,9 +23,13 @@ struct RoscaDetails {
     string occurrence;
 }
 
-contract Rosca {
+contract Rosca is Pausable {
     using SafeMath for uint256;
 
+    /// @notice Rosca currency
+    IERC20 immutable TOKEN;
+
+    /// @notice Rosca enums
     enum PotState {
         isOpen,
         isClosed,
@@ -70,6 +75,11 @@ contract Rosca {
         uint256 deadline;
         Contribution[] contributions;
     }
+
+    struct PotExcess {
+        uint256 potId;
+        uint256 excessAmount;
+    }
     /// @dev RoscaSpaceDetails struct for this Rosca
     struct RoscaSpaceDetails {
         RoscaDetails RD;
@@ -84,6 +94,7 @@ contract Rosca {
 
     /// @notice Rosca variables
     RoscaSpaceDetails RSD;
+    PotExcess[] potExcesses;
     string authCode;
     PotDetails currentPD;
     Transaction[] transactions;
@@ -118,6 +129,7 @@ contract Rosca {
         address _creator
     ) {
         RSD.RD = _RD;
+        TOKEN = _RD.token;
         RSD.creator = _creator;
         authCode = _aCode;
         Member memory firstMember = Member({
@@ -130,6 +142,35 @@ contract Rosca {
         RSD.members.push(firstMember);
         memberIndex[_creator] = RSD.members.length;
         _createPot();
+    }
+
+    /// @notice Rosca modifiers
+    modifier onlyMember() {
+        require(
+            RSD.members[memberIndex[msg.sender].sub(1)].memberAddress ==
+                msg.sender,
+            "You are not a member"
+        );
+        _;
+    }
+
+    modifier onlyAdmin() {
+        require(
+            RSD.members[memberIndex[msg.sender].sub(1)].isAdmin == true,
+            "You are not an admin"
+        );
+        _;
+    }
+
+    /// @notice Rosca pausable functions
+    /// @notice Should pause the Rosca
+    function pause() external onlyAdmin {
+        _pause();
+    }
+
+    /// @notice Should unpause the Rosca
+    function unpause() external onlyAdmin {
+        _unpause();
     }
 
     /// @notice Rosca functions
@@ -145,6 +186,7 @@ contract Rosca {
             memberIndex[msg.sender] == 0,
             "You are already a member of this Rosca"
         );
+        require(RSD.members.length <= 255, "Rosca is full"); //max 255 members
         uint256 joinedAt = block.timestamp;
 
         Member memory newMember = Member({
@@ -171,15 +213,15 @@ contract Rosca {
             "You can only contribute to an open pot"
         );
         require(
-            RSD.RD.token.allowance(msg.sender, address(this)) >= _amount,
+            TOKEN.allowance(msg.sender, address(this)) >= _amount,
             "You need to approve the token first"
         );
         require(
-            RSD.RD.token.transferFrom(msg.sender, address(this), _amount),
-            "Transfer failed"
+            RSD.RD.goalAmount.sub(currentPD.potBalance) >= _amount,
+            "Pot will be overfunded"
         );
+
         RSD.currentPotBalance = RSD.currentPotBalance.add(_amount);
-        RSD.roscaBalance = RSD.RD.token.balanceOf(address(this));
         currentPD.potBalance = currentPD.potBalance.add(_amount);
         currentPD.contributions.push(
             Contribution({
@@ -191,22 +233,41 @@ contract Rosca {
         if (currentPD.potBalance == RSD.RD.goalAmount) {
             RSD.PS = PotState.isClosed;
         }
+        require(
+            TOKEN.transferFrom(msg.sender, address(this), _amount),
+            "Transfer failed"
+        );
+        RSD.roscaBalance = TOKEN.balanceOf(address(this));
         emit PotFunded(msg.sender, _amount);
     }
 
     /// @notice Should payout the current pot
     function payOutPot() external {
+        uint256 dueAmount;
         require(RSD.RS == RoscaState.isLive, "!RoscaIsLive");
-        require(currentPD.potBalance == RSD.RD.goalAmount, "!FullyFunded");
-        uint256 dueAmount = currentPD.potBalance;
+        require(currentPD.potBalance >= RSD.RD.goalAmount, "!FullyFunded");
+        if (currentPD.potBalance > RSD.RD.goalAmount) {
+            //Keep excess in the Rosca
+            dueAmount = RSD.RD.goalAmount;
+            uint256 excessAmount = currentPD.potBalance.sub(RSD.RD.goalAmount);
+            potExcesses.push(
+                PotExcess({potId: currentPD.potId, excessAmount: excessAmount})
+            );
+        } else if (currentPD.potBalance == RSD.RD.goalAmount) {
+            //Transfer all funds to potOwner
+            dueAmount = currentPD.potBalance;
+        }
+        currentPD.potBalance = 0;
+        RSD.currentPotBalance = 0;
+        RSD.PS = PotState.isPayedOut;
+        //change is potted to true
+        RSD.members[memberIndex[currentPD.potOwner].sub(1)].isPotted = true;
+
         require(
-            RSD.RD.token.transfer(currentPD.potOwner, currentPD.potBalance),
+            TOKEN.transfer(currentPD.potOwner, dueAmount),
             "Transfer failed"
         );
-        RSD.currentPotBalance = 0;
-        RSD.roscaBalance = RSD.RD.token.balanceOf(address(this));
-        RSD.PS = PotState.isPayedOut;
-        RSD.members[memberIndex[currentPD.potOwner].sub(1)].isPotted = true;
+        RSD.roscaBalance = TOKEN.balanceOf(address(this));
         delete currentPD.contributions;
         emit PotPayedOut(currentPD.potOwner, dueAmount);
         _createPot();
@@ -236,19 +297,14 @@ contract Rosca {
             })
         );
 
-        RSD.roscaBalance = RSD.RD.token.balanceOf(address(this));
+        RSD.roscaBalance = TOKEN.balanceOf(address(this));
 
         emit WithdrawalRequest(_member, _amount, requestIdx);
     }
 
     /// @notice Should approve a withdrawal request
     /// @param _requestIdx the index of the request
-    function approveWithdrawalRequest(uint256 _requestIdx) external {
-        require(
-            RSD.members[memberIndex[msg.sender].sub(1)].memberAddress ==
-                msg.sender,
-            "You are not a member"
-        );
+    function approveWithdrawalRequest(uint256 _requestIdx) external onlyMember {
         require(
             transactions[_requestIdx].isExecuted == false,
             "Transaction already executed"
@@ -263,7 +319,7 @@ contract Rosca {
             .add(1);
 
         emit WithdrawalApproved(msg.sender, block.timestamp);
-        RSD.roscaBalance = RSD.RD.token.balanceOf(address(this));
+        RSD.roscaBalance = TOKEN.balanceOf(address(this));
         if (transactions[_requestIdx].numApprovals >= 2) {
             transactions[_requestIdx].isExecuted = true;
             _withdrawFromRosca(
@@ -283,11 +339,11 @@ contract Rosca {
             "You can only withdraw from a live Rosca"
         );
         require(
-            RSD.RD.token.balanceOf(address(this)) >= _amount,
+            TOKEN.balanceOf(address(this)) >= _amount,
             "!InsufficientFunds"
         );
-        require(RSD.RD.token.transfer(_member, _amount), "Transfer failed");
-        RSD.roscaBalance = RSD.RD.token.balanceOf(address(this));
+        RSD.roscaBalance = TOKEN.balanceOf(address(this));
+        require(TOKEN.transfer(_member, _amount), "Transfer failed");
         emit WithdrawalExecuted(_member, _amount, block.timestamp);
     }
 
@@ -330,6 +386,20 @@ contract Rosca {
         );
     }
 
+    /// @notice Should end Rosca
+    function endRosca() external {
+        require(
+            RSD.members[memberIndex[msg.sender].sub(1)].isAdmin == true,
+            "You are not an admin"
+        );
+        require(RSD.RS == RoscaState.isLive, "Rosca is not live");
+        require(
+            RSD.currentPotBalance == 0,
+            "You cannot end a live Rosca with a pending pot"
+        );
+        RSD.RS = RoscaState.isEnded;
+    }
+
     /// @notice Rosca getters
     /// @dev should get the RoscaSpaceDetails struct
     function getRoscaDetails()
@@ -348,6 +418,15 @@ contract Rosca {
     /// @dev should get the list of members
     function getMembers() external view returns (Member[] memory) {
         return RSD.members;
+    }
+
+    /// @dev should check if member is in Rosca
+    function isMember(address _member) external view returns (bool) {
+        if (memberIndex[_member] == 0) {
+            return false;
+        } else {
+            return true;
+        }
     }
 
     /// @dev should return when next pot is due

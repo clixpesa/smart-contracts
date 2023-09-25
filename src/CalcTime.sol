@@ -1,19 +1,10 @@
 // SPDX-License-Identifier: Apache 2.0
-pragma solidity ^0.8.19;
+pragma solidity 0.8.19;
+import "hardhat/console.sol";
 
 library CalcTime {
     uint constant SECONDS_PER_DAY = 24 * 60 * 60;
-    uint constant SECONDS_PER_HOUR = 60 * 60;
-    uint constant SECONDS_PER_MINUTE = 60;
     int constant OFFSET19700101 = 2440588;
-
-    uint constant DOW_MON = 1;
-    uint constant DOW_TUE = 2;
-    uint constant DOW_WED = 3;
-    uint constant DOW_THU = 4;
-    uint constant DOW_FRI = 5;
-    uint constant DOW_SAT = 6;
-    uint constant DOW_SUN = 7;
 
     /// @dev should return next timestamp from given schedule and day of week
     /// @param _schDay 1 Monday
@@ -50,6 +41,8 @@ library CalcTime {
                     nextTimeStamp = nextTimeStamp + (28 * SECONDS_PER_DAY);
                 }
                 return nextTimeStamp;
+            } else {
+                return 0;
             }
         }
     }
@@ -74,10 +67,11 @@ library CalcTime {
                 return i + 1;
             }
         }
+        return 0;
     }
 
     /// @dev return number of ocurrance from given ocurrance
-    /// @param _ocurrance 1. Daily 7. Weekly 30 Monthly
+    /// @param _ocurrance 1. Daily 7. Weekly 28 Monthly
     function _getOcurranceNo(
         string memory _ocurrance
     ) internal pure returns (uint256 ocurranceNo) {
@@ -89,6 +83,7 @@ library CalcTime {
                 return ocurranceSize[i];
             }
         }
+        return 0;
     }
 
     function _daysFromDate(
@@ -97,6 +92,8 @@ library CalcTime {
         uint day
     ) internal pure returns (uint _days) {
         require(year >= 1970);
+        require(month > 0 && month <= 12);
+        require(day > 0 && day <= 31);
         int _year = int(year);
         int _month = int(month);
         int _day = int(day);
@@ -117,6 +114,7 @@ library CalcTime {
     function _daysToDate(
         uint _days
     ) internal pure returns (uint year, uint month, uint day) {
+        require(_days >= 0);
         int __days = int(_days);
 
         int L = __days + 68569 + OFFSET19700101;

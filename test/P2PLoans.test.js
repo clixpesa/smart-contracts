@@ -83,9 +83,9 @@ describe('Clixpesa P2P Loans', function () {
     const loanId = thisLoans[0].LD.loanId
     //increase time by 7 days
     await time.increase(7 * 24 * 60 * 60)
-    const thisLoan = await P2PLoans.getP2PLoanById(loanId)
+    await P2PLoans.updateLoanBalance(loanId)
     delay(3000)
-    console.log("Increased Balance: ", await thisLoan.wait())
+    const thisLoan = await P2PLoans.getP2PLoanById(loanId)
     expect(thisLoan.currentBalance).to.be.above(currentBalance)
 
   })
@@ -121,6 +121,7 @@ describe('Clixpesa P2P Loans', function () {
     const amount = ethers.utils.parseUnits('0.5', tokenDecimals)
     const p2pLoans = await P2PLoans.getP2PLoansByOwner(addr1.address)
     const loanId = p2pLoans[0].LD.loanId
+    const thisLoan1 = await P2PLoans.getP2PLoanById(loanId)
     const lenderBal = await Token.balanceOf(addr2.address)
     await Token.connect(addr1).approve(P2PLoans.address, amount)
     delay(3000)
@@ -131,8 +132,8 @@ describe('Clixpesa P2P Loans', function () {
     const results = P2PLoansIface.parseLog({ data: thisLog.data, topics: thisLog.topics })
     expect(results.args.loanId).to.be.equal(loanId)
     expect(lenderBal.add(amount)).to.be.equal(await Token.balanceOf(addr2.address))
-    const thisLoan = await P2PLoans.getP2PLoanById(loanId)
-    expect(thisLoan.currentBalance).to.be.equal(p2pLoans[0].currentBalance.sub(amount))
+    const thisLoan2 = await P2PLoans.getP2PLoanById(loanId)
+    expect(thisLoan2.currentBalance).to.be.equal(thisLoan1.currentBalance.sub(amount))
   })
   
   it('Should Create a Loan Offer for ADD2', async function () {
