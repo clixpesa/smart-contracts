@@ -92,8 +92,8 @@ library CalcTime {
         uint day
     ) internal pure returns (uint _days) {
         require(year >= 1970);
-        require(month >= 1 && month <= 12);
-        require(day >= 1 && day <= 31);
+        require(month > 0 && month <= 12);
+        require(day > 0 && day <= 31);
         int _year = int(year);
         int _month = int(month);
         int _day = int(day);
@@ -114,7 +114,7 @@ library CalcTime {
     function _daysToDate(
         uint _days
     ) internal pure returns (uint year, uint month, uint day) {
-        require(day >= 1 && day <= 31);
+        require(_days >= 0);
         int __days = int(_days);
 
         int L = __days + 68569 + OFFSET19700101;
