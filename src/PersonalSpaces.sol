@@ -8,6 +8,7 @@
 pragma solidity 0.8.19;
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "hardhat/console.sol";
 
 contract PersonalSpaces {
     using SafeMath for uint256;
@@ -69,6 +70,15 @@ contract PersonalSpaces {
 
     function createPersonalSpace(SpaceDetails memory _SD) external {
         require(msg.sender == _SD.owner, "Must be owner");
+        require(
+            bytes(_SD.spaceName).length > 0 &&
+                bytes(_SD.spaceName).length <= 40,
+            "!Space Name"
+        );
+        require(
+            bytes(_SD.spaceId).length > 0 && bytes(_SD.spaceId).length <= 15,
+            "!Space Id"
+        );
         require(personalSpaceIndex[_SD.spaceId] == 0, "SpaceId already exists");
         require(
             myPersonalSpaceIdx[msg.sender][_SD.spaceId] == 0,
@@ -76,10 +86,8 @@ contract PersonalSpaces {
         );
         require(_SD.owner != address(0), "Owner cannot be 0 address");
         require(_SD.token != IERC20(address(0)), "Token cannot be 0 address");
-        require(bytes(_SD.spaceName).length > 0, "Name cannot be empty");
         require(_SD.deadline > block.timestamp, "Deadline must be in future");
         require(_SD.goalAmount > 0, "Goal must be greater than 0");
-
         SpaceStates memory _SS = SpaceStates(
             FundsState.isFundable,
             ActivityState.isActive
@@ -138,6 +146,7 @@ contract PersonalSpaces {
         if (myPersonalSpaceIdx[owner][_spaceId] == 0) {
             return false;
         }
+        return true;
     }
 
     function updatePersonalSpace(SpaceDetails memory _SD) external {

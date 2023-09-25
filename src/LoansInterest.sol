@@ -13,6 +13,10 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 library LoanInterest {
     using SafeMath for uint256;
 
+    /// @notice Get the accrued interest on a loan
+    /// @param _amount The amount of the loan
+    /// @param _rate The interest rate in basis points
+    /// @param _duration The duration of the loan in seconds since the last loan update
     function _getInterest(
         uint256 _amount,
         uint256 _rate,
@@ -33,6 +37,12 @@ library LoanInterest {
         uint256 _interest = convert(thisInterest);
         return _interest;
     }
+
+    /// @notice Get the new balance of a loan
+    /// @dev The new balance is the amount of the loan plus the accrued interest
+    /// @param _amount The amount of the loan
+    /// @param _rate The interest rate in basis points
+    /// @param _duration The duration of the loan in seconds since the last loan update
 
     function _getNewBalance(
         uint256 _amount,

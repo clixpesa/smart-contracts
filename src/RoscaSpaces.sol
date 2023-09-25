@@ -30,6 +30,10 @@ contract RoscaSpaces {
         RoscaDetails memory _RD,
         string memory _aCode
     ) public {
+        require(
+            myRoscas[msg.sender].length < 10, //max 10 roscaSpaces per user
+            "Max RoscaSpaces reached"
+        );
         Rosca newRosca = new Rosca(_RD, _aCode, msg.sender);
         roscaSpaces.push(newRosca);
         roscaSpacesIndex[address(newRosca)] = roscaSpaces.length - 1;
